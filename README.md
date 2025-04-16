@@ -98,6 +98,4 @@ Les contributions sont les bienvenues ! Proposez vos idées via les Issues ou ou
 **Nom du projet** : `PoshSyncBackup`
 ```
 
----
 
-Souhaitez-vous que je vous génère aussi les fichiers d’accompagnement (`.gitignore`, icône, tâche planifiée `.xml`, etc.) pour un dépôt GitHub clé-en-main ?
