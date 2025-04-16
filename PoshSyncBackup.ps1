@@ -3,12 +3,12 @@
 # ====================================
 # Liste des dossiers sources à surveiller
 $Sources = @(
-    "C:\Users\VotreNom\Documents\Projet1",
-    "D:\Travail\Photos",
-    "C:\Users\VotreNom\Bureau\DossierClient"
+    "C:\Users\GIRARDGaylord\Alt Up",
+    "C:\Users\GIRARDGaylord\Artemys",
+    "C:\Users\GIRARDGaylord\OneDrive - Alt Up\Documents"
 )
 # Dossier racine de sauvegarde
-$BackupRoot = "E:\Sauvegarde"
+$BackupRoot = "E:\BKP Alt-Up"
 # Exclusions globales
 $Exclusions = @("*.tmp", "*.bak", "node_modules", "bin", "obj", "Thumbs.db", "desktop.ini", ".DS_Store")
 # Répertoire des logs
@@ -24,6 +24,9 @@ $ForceSyncInterval = 6
 $EnableToastNotifications = $true
 $AppId = "SyncAutoBackup"
 
+# Force l'encodage en UTF-8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 # ====================================
 # INITIALISATION
 # ====================================
@@ -31,10 +34,10 @@ $AppId = "SyncAutoBackup"
 if (-not (Test-Path -Path $logDir)) {
     try {
         New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-        Write-Host "📁 Répertoire de logs créé : $logDir"
+        Write-Host "[INFO] Repertoire de logs cree : $logDir"
     }
     catch {
-        Write-Host "❌ Erreur lors de la création du répertoire de logs : $_" -ForegroundColor Red
+        Write-Host "[ERREUR] Erreur lors de la creation du repertoire de logs : $_" -ForegroundColor Red
         exit 1
     }
 }
@@ -42,18 +45,18 @@ if (-not (Test-Path -Path $logDir)) {
 # Vérifier l'existence des dossiers sources
 foreach ($src in $Sources) {
     if (-not (Test-Path -Path $src)) {
-        Write-Host "⚠️ Source non trouvée : $src" -ForegroundColor Yellow
+        Write-Host "[ATTENTION] Source non trouvee : $src" -ForegroundColor Yellow
     }
 }
-
+ 
 # Vérifier l'existence du dossier de sauvegarde
 if (-not (Test-Path -Path $BackupRoot)) {
     try {
         New-Item -ItemType Directory -Path $BackupRoot -Force | Out-Null
-        Write-Host "📁 Dossier de sauvegarde créé : $BackupRoot"
+        Write-Host "[INFO] Dossier de sauvegarde cree : $BackupRoot"
     }
     catch {
-        Write-Host "❌ Erreur lors de la création du dossier de sauvegarde : $_" -ForegroundColor Red
+        Write-Host "[ERREUR] Erreur lors de la creation du dossier de sauvegarde : $_" -ForegroundColor Red
         exit 1
     }
 }
@@ -86,10 +89,10 @@ function Show-ToastNotification {
     
     # Déterminer l'icône en fonction du type
     $icon = switch ($Type) {
-        "Info"    { "ℹ️" }
-        "Warning" { "⚠️" }
-        "Error"   { "❌" }
-        "Success" { "✅" }
+        "Info"    { "[i]" }
+        "Warning" { "[!]" }
+        "Error"   { "[X]" }
+        "Success" { "[V]" }
     }
     
     try {
@@ -143,7 +146,7 @@ function Write-Log {
     $logMessage = "[$timestamp] [$Level] $Message"
     
     # Ajouter au fichier journal
-    Add-Content -Path $LogFile -Value $logMessage
+    Add-Content -Path $LogFile -Value $logMessage -Encoding UTF8
     
     # Afficher dans la console avec couleur
     switch ($Level) {
@@ -169,13 +172,15 @@ function Start-Sync {
     }
     
     $folderName = Split-Path $Source -Leaf
-    $Destination = Join-Path -Path $BackupRoot -ChildPath $folderName
-    $lockKey = "$Source→$Destination"
-    $logFile = "$logDir\Sync_${folderName}_$(Get-Date -Format 'yyyyMMdd').log"
+    # Créer un nom de dossier sécurisé pour la destination
+    $safeDestinationFolder = $folderName #-replace '[ -]', '_'
+    $Destination = Join-Path -Path $BackupRoot -ChildPath $safeDestinationFolder
+    $lockKey = "$Source->$Destination"
+    $logFile = "$logDir\Sync_$($safeDestinationFolder)_$(Get-Date -Format 'yyyyMMdd').log"
     
     # Vérifier si une synchronisation est déjà en cours
     if ($global:verrous[$lockKey]) {
-        Write-Log -Message "Synchronisation déjà en cours pour $folderName, ignorée." -LogFile $logFile -Level "WARNING"
+        Write-Log -Message "Synchronisation deja en cours pour $folderName, ignoree." -LogFile $logFile -Level "WARNING"
         return
     }
     
@@ -208,8 +213,8 @@ function Start-Sync {
         
         # Paramètres Robocopy améliorés
         $robocopyParams = @(
-            $Source,                # Source
-            $Destination,           # Destination
+            "`"$Source`"",         # Source avec guillemets
+            "`"$Destination`"",     # Destination avec guillemets
             "/MIR",                 # Miroir (équivalent à /E /PURGE)
             "/Z",                   # Mode redémarrable
             "/FFT",                 # Utiliser des horodatages FAT (2 secondes de précision)
@@ -221,39 +226,45 @@ function Start-Sync {
             "/TEE",                 # Afficher la sortie dans la console et le fichier journal
             "/BYTES",               # Afficher les tailles en octets
             "/TS",                  # Inclure les horodatages
-            "/LOG+:$logFile"        # Journalisation
+            "/LOG+:`"$logFile`""    # Journalisation avec guillemets
         ) + $excludeOptions
         
-        Write-Log -Message "Début de la synchronisation de $Source vers $Destination" -LogFile $logFile -Level "INFO"
+        Write-Log -Message "Debut de la synchronisation de $Source vers $Destination" -LogFile $logFile -Level "INFO"
         
-        # Exécuter Robocopy et récupérer le code de sortie de façon fiable
-        $process = Start-Process -FilePath "robocopy" -ArgumentList $robocopyParams -NoNewWindow -Wait -PassThru
+        # Construire la ligne de commande Robocopy
+        $robocopyCmd = "robocopy $([string]::Join(' ', $robocopyParams))"
+        
+        # Exécuter Robocopy via Invoke-Expression pour un meilleur contrôle
+        $output = Invoke-Expression $robocopyCmd 2>&1
         $exitCode = $LASTEXITCODE
+        
+        # Ajouter la sortie de Robocopy au journal
+        $output | ForEach-Object { Add-Content -Path $logFile -Value $_ -Encoding UTF8 }
         
         # Analyser le code de retour de Robocopy
         switch ($exitCode) {
             0 { 
-                Write-Log -Message "Synchronisation terminée. Aucun fichier copié." -LogFile $logFile -Level "SUCCESS"
+                Write-Log -Message "Synchronisation terminee. Aucun fichier copie." -LogFile $logFile -Level "SUCCESS"
                 # Réinitialiser le compteur d'erreurs
                 $global:errorCount[$lockKey] = 0
             }
             1 { 
-                Write-Log -Message "Synchronisation terminée. Fichiers copiés avec succès." -LogFile $logFile -Level "SUCCESS"
+                Write-Log -Message "Synchronisation terminee. Fichiers copies avec succes." -LogFile $logFile -Level "SUCCESS"
                 # Réinitialiser le compteur d'erreurs
                 $global:errorCount[$lockKey] = 0
             }
             2 { 
-                Write-Log -Message "Synchronisation terminée. Fichiers supplémentaires détectés." -LogFile $logFile -Level "SUCCESS"
+                Write-Log -Message "Synchronisation terminee. Fichiers supplementaires detectes." -LogFile $logFile -Level "SUCCESS"
                 # Réinitialiser le compteur d'erreurs
                 $global:errorCount[$lockKey] = 0
             }
             3 { 
-                Write-Log -Message "Synchronisation terminée. Fichiers copiés et supplémentaires détectés." -LogFile $logFile -Level "SUCCESS"
+                Write-Log -Message "Synchronisation terminee. Fichiers copies et supplementaires detectes." -LogFile $logFile -Level "SUCCESS"
                 # Réinitialiser le compteur d'erreurs
                 $global:errorCount[$lockKey] = 0
             }
             { $_ -ge 8 } { 
-                Write-Log -Message "Échec de la synchronisation. Code de retour: $_" -LogFile $logFile -Level "ERROR"
+                Write-Log -Message "Echec de la synchronisation. Code de retour: $_" -LogFile $logFile -Level "ERROR"
                 
                 # Incrémenter le compteur d'erreurs
                 if (-not $global:errorCount[$lockKey]) {
@@ -272,7 +283,7 @@ function Start-Sync {
                     
                     # Notification si on est à la moitié des tentatives
                     if ($global:retryCount[$lockKey] -eq [Math]::Ceiling($MaxRetries / 2)) {
-                        Show-ToastNotification -Title "Problème de synchronisation" -Message "Difficultés avec la synchronisation de $folderName. Tentative $($global:retryCount[$lockKey])/$MaxRetries." -Type "Warning"
+                        Show-ToastNotification -Title "Probleme de synchronisation" -Message "Difficultes avec la synchronisation de $folderName. Tentative $($global:retryCount[$lockKey])/$MaxRetries." -Type "Warning"
                     }
                     
                     # Libérer le verrou avant de réessayer
@@ -282,15 +293,15 @@ function Start-Sync {
                     return
                 }
                 else {
-                    Write-Log -Message "Nombre maximum de tentatives atteint. Synchronisation abandonnée." -LogFile $logFile -Level "ERROR"
+                    Write-Log -Message "Nombre maximum de tentatives atteint. Synchronisation abandonnee." -LogFile $logFile -Level "ERROR"
                     
                     # Afficher une notification
-                    Show-ToastNotification -Title "Échec de la synchronisation" -Message "La synchronisation de $folderName a échoué après $MaxRetries tentatives." -Type "Error"
+                    Show-ToastNotification -Title "Echec de la synchronisation" -Message "La synchronisation de $folderName a echoue apres $MaxRetries tentatives." -Type "Error"
                     
                     $global:retryCount[$lockKey] = 0
                 }
             }
-            default { Write-Log -Message "Synchronisation terminée avec un code de retour: $_" -LogFile $logFile -Level "INFO" }
+            default { Write-Log -Message "Synchronisation terminee avec un code de retour: $_" -LogFile $logFile -Level "INFO" }
         }
         
         # Réinitialiser le compteur de tentatives en cas de succès
@@ -320,13 +331,13 @@ function Register-FolderWatcher {
     )
     
     if (-not (Test-Path -Path $FolderPath)) {
-        Write-Host "⚠️ Impossible de surveiller le dossier inexistant: $FolderPath" -ForegroundColor Yellow
+        Write-Host "[ATTENTION] Impossible de surveiller le dossier inexistant: $FolderPath" -ForegroundColor Yellow
         return
     }
     
     try {
         $folderName = Split-Path $FolderPath -Leaf
-        Write-Host "🎯 Surveillance de: $FolderPath" -ForegroundColor Cyan
+        Write-Host "[INFO] Surveillance de: $FolderPath" -ForegroundColor Cyan
         
         $fsw = New-Object System.IO.FileSystemWatcher $FolderPath -Property @{
             IncludeSubdirectories = $true
@@ -370,7 +381,7 @@ function Register-FolderWatcher {
         Start-Sync -Source $FolderPath -Force
     }
     catch {
-        Write-Host "❌ Erreur lors de la configuration de la surveillance pour $FolderPath : $_" -ForegroundColor Red
+        Write-Host "[ERREUR] Erreur lors de la configuration de la surveillance pour $FolderPath : $_" -ForegroundColor Red
     }
 }
 
@@ -385,7 +396,7 @@ $timer.Enabled = $true
 $timerAction = {
     foreach ($src in $using:Sources) {
         if (Test-Path -Path $src) {
-            Write-Host "⏰ Synchronisation planifiée pour $src" -ForegroundColor Magenta
+            Write-Host "[PLANIFIE] Synchronisation planifiee pour $src" -ForegroundColor Magenta
             Start-Sync -Source $src -Force
         }
     }
@@ -403,11 +414,11 @@ foreach ($src in $Sources) {
 # ====================================
 # MENU ET CONTRÔLE
 # ====================================
-Write-Host "`n📡 Surveillance active des dossiers. Contrôles disponibles:" -ForegroundColor Green
-Write-Host "  • S - Synchronisation manuelle de tous les dossiers" -ForegroundColor Cyan
-Write-Host "  • L - Afficher les journaux récents" -ForegroundColor Cyan
-Write-Host "  • ? - Afficher l'aide" -ForegroundColor Cyan 
-Write-Host "  • Q - Quitter le programme" -ForegroundColor Cyan
+Write-Host "`n[SYSTEME] Surveillance active des dossiers. Controles disponibles:" -ForegroundColor Green
+Write-Host "S - Synchronisation manuelle de tous les dossiers" -ForegroundColor Cyan
+Write-Host "L - Afficher les journaux recents" -ForegroundColor Cyan
+Write-Host "? - Afficher l'aide" -ForegroundColor Cyan 
+Write-Host "Q - Quitter le programme" -ForegroundColor Cyan
 Write-Host ""
 
 # Boucle principale
@@ -417,7 +428,7 @@ while ($true) {
         
         switch ($key.Character) {
             "s" {
-                Write-Host "`n🔄 Synchronisation manuelle de tous les dossiers..." -ForegroundColor Yellow
+                Write-Host "`n[ACTION] Synchronisation manuelle de tous les dossiers..." -ForegroundColor Yellow
                 foreach ($src in $Sources) {
                     if (Test-Path -Path $src) {
                         Start-Sync -Source $src -Force
@@ -426,25 +437,25 @@ while ($true) {
                 Write-Host ""
             }
             "l" {
-                Write-Host "`n📋 Affichage des dernières entrées de journal:" -ForegroundColor Yellow
+                Write-Host "`n[INFO] Affichage des dernieres entrees de journal:" -ForegroundColor Yellow
                 Get-ChildItem -Path $logDir -Filter "Sync_*_$(Get-Date -Format 'yyyyMMdd').log" | 
                 ForEach-Object {
                     $logName = $_.Name
                     Write-Host "`n$logName" -ForegroundColor Cyan
-                    Get-Content $_.FullName -Tail 10
+                    Get-Content $_.FullName -Tail 10 -Encoding UTF8
                 }
                 Write-Host ""
             }
             "?" {
-                Write-Host "`n❓ Aide:" -ForegroundColor Yellow
-                Write-Host "  • S - Synchronisation manuelle de tous les dossiers" -ForegroundColor Cyan
-                Write-Host "  • L - Afficher les journaux récents" -ForegroundColor Cyan
-                Write-Host "  • ? - Afficher l'aide" -ForegroundColor Cyan
-                Write-Host "  • Q - Quitter le programme" -ForegroundColor Cyan
+                Write-Host "`n[AIDE] Aide:" -ForegroundColor Yellow
+                Write-Host "S - Synchronisation manuelle de tous les dossiers" -ForegroundColor Cyan
+                Write-Host "L - Afficher les journaux recents" -ForegroundColor Cyan
+                Write-Host "? - Afficher l'aide" -ForegroundColor Cyan
+                Write-Host "Q - Quitter le programme" -ForegroundColor Cyan
                 Write-Host ""
             }
             "q" {
-                Write-Host "`n👋 Arrêt de la surveillance et sortie du programme..." -ForegroundColor Yellow
+                Write-Host "`n[SYSTEME] Arret de la surveillance et sortie du programme..." -ForegroundColor Yellow
                 # Nettoyer les événements enregistrés
                 Get-EventSubscriber -Force | Unregister-Event -Force
                 # Arrêter le timer
