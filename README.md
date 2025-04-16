@@ -43,7 +43,7 @@ Install-Module -Name BurntToast -Force
 1. Clonez ou téléchargez ce dépôt :
 
 ```bash
-git clone https://github.com/votre-utilisateur/PoshSyncBackup.git
+git clone https://github.com/GGI1982/PoshSyncBackup.git
 ```
 
 2. Modifiez les paramètres dans la section `# CONFIGURATION` du script :
