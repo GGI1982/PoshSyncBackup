@@ -83,7 +83,7 @@ powershell.exe -ExecutionPolicy Bypass -File .\PoshSyncBackup.ps1
 
 ## 📄 Licence
 
-Ce projet est distribué sous licence **MIT**.
+Ce projet est distribué sous licence **GNU GPL**.
 
 ---
 
