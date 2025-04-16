@@ -93,7 +93,7 @@ Les contributions sont les bienvenues ! Proposez vos idées via les Issues ou ou
 
 ---
 
-**Auteur** : [VotreNom]  
+**Auteur** : [Gaylord GIRARD]  
 **Version actuelle** : `v1.0`  
 **Nom du projet** : `PoshSyncBackup`
 ```
